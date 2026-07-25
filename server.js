@@ -73,6 +73,24 @@ const pendingTransactions = new Map();
 const pendingWipeConfirmations = new Set();
 const WIPE_CONFIRM_PHRASE = 'evet, tümünü sil';
 
+// Render'ın ücretsiz planı uykudan uyanırken yanıt gecikebiliyor; bu durumda Telegram
+// aynı update'i webhook'a tekrar gönderebilir ve aynı mesaj (örn. "onayla") iki kez
+// işlenip işlemler ÇİFT kaydedilebilir. Bunu önlemek için son işlenen update_id'leri
+// bellekte tutup tekrarını görmezden geliyoruz.
+const processedUpdateIds = new Set();
+function isDuplicateUpdate(ctx) {
+  const id = ctx.update && ctx.update.update_id;
+  if (id === undefined || id === null) return false;
+  if (processedUpdateIds.has(id)) return true;
+  processedUpdateIds.add(id);
+  if (processedUpdateIds.size > 1000) {
+    const keepLast = [...processedUpdateIds].slice(-500);
+    processedUpdateIds.clear();
+    keepLast.forEach((x) => processedUpdateIds.add(x));
+  }
+  return false;
+}
+
 function freshDefaultData() {
   // db.js'teki DEFAULT_DATA referansını değil, derin bir kopyasını döndürür
   // (aksi halde nesne/dizi referansları paylaşılır ve sonraki kayıtlar eski veriye karışabilir).
@@ -428,6 +446,30 @@ app.put('/api/data', async (req, res) => {
   }
 });
 
+// Aynı tür + tarih + tutar + kategori + not'a sahip birebir aynı işlemleri tekilleştirir.
+// Telegram'ın webhook'u zaman zaman aynı onayı iki kez gönderip aynı ekstre/fişi
+// çift kaydettirebiliyor; bu uç nokta bu tür kopyaları temizler (taksitli/tekrarlayan
+// gruplara ait kayıtlara dokunmaz, sadece tam eşleşen kopyaları siler, ilkini tutar).
+app.post('/api/maintenance/dedupe-transactions', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const seen = new Set();
+    const before = (data.transactions || []).length;
+    data.transactions = (data.transactions || []).filter((t) => {
+      const key = [t.type, t.date, t.amount, t.category, t.note || '', t.installmentGroupId || '', t.installmentNo || ''].join('|');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const removed = before - data.transactions.length;
+    if (removed > 0) await db.setData(data);
+    res.json({ ok: true, removed, remaining: data.transactions.length });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Tekilleştirme başarısız' });
+  }
+});
+
 /* ---------- REST API: Raporlar (reports.js motorunu kullanır) ---------- */
 
 // Tek istekte dashboard/raporlar sayfasının ihtiyaç duyduğu her şey
@@ -619,6 +661,7 @@ if (BOT_TOKEN) {
 
   bot.on('text', async (ctx) => {
     try {
+      if (isDuplicateUpdate(ctx)) return; // Telegram'ın tekrar gönderdiği aynı update'i yok say
       if (ALLOWED_CHAT_ID && String(ctx.chat.id) !== String(ALLOWED_CHAT_ID)) {
         return; // tanınmayan kullanıcıdan gelen mesajları yok say
       }
@@ -826,6 +869,7 @@ if (BOT_TOKEN) {
   /* --- Fiş / fatura fotoğrafı --- */
   bot.on('photo', async (ctx) => {
     try {
+      if (isDuplicateUpdate(ctx)) return;
       if (ALLOWED_CHAT_ID && String(ctx.chat.id) !== String(ALLOWED_CHAT_ID)) return;
       if (!ANTHROPIC_API_KEY) {
         await ctx.reply('Fiş/fatura fotoğrafı okuma özelliği için Render\'da ANTHROPIC_API_KEY tanımlı olmalı.');
@@ -882,6 +926,7 @@ if (BOT_TOKEN) {
 
   bot.on('document', async (ctx) => {
     try {
+      if (isDuplicateUpdate(ctx)) return;
       if (ALLOWED_CHAT_ID && String(ctx.chat.id) !== String(ALLOWED_CHAT_ID)) return;
       const doc = ctx.message.document;
       if (!doc.mime_type || !doc.mime_type.includes('pdf')) {
