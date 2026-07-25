@@ -16,6 +16,7 @@ const {
 } = require('./aiAssistant');
 const { PDFParse } = require('pdf-parse');
 const https = require('https');
+const reports = require('./reports');
 
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -424,6 +425,175 @@ app.put('/api/data', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Veri kaydedilemedi' });
+  }
+});
+
+/* ---------- REST API: Raporlar (reports.js motorunu kullanır) ---------- */
+
+// Tek istekte dashboard/raporlar sayfasının ihtiyaç duyduğu her şey
+app.get('/api/reports/overview', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const monthKey = req.query.month || todayISO().slice(0, 7);
+    const trendMonths = Math.min(36, Math.max(1, Number(req.query.trendMonths) || 12));
+    const forecastMonths = Math.min(12, Math.max(1, Number(req.query.forecastMonths) || 3));
+    res.json(reports.fullReportBundle(data, { monthKey, trendMonths, forecastMonths }));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Rapor oluşturulamadı' });
+  }
+});
+
+// Bir ay için gelir/gider özeti, önceki aya göre değişim, tasarruf oranı
+app.get('/api/reports/month', async (req, res) => {
+  try {
+    const data = await db.getData();
+    res.json(reports.monthOverview(data, req.query.month || todayISO().slice(0, 7)));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Ay özeti oluşturulamadı' });
+  }
+});
+
+// Kategori kırılımı (pasta grafik / tablo) — type=gelir|gider
+app.get('/api/reports/categories', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const type = req.query.type === 'gelir' ? 'gelir' : 'gider';
+    res.json(reports.categoryBreakdown(data, type, req.query.month || todayISO().slice(0, 7)));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Kategori kırılımı oluşturulamadı' });
+  }
+});
+
+// Kategori x Ay pivot tablosu (Raporlar sayfasındaki büyük tablo)
+app.get('/api/reports/category-pivot', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const type = req.query.type === 'gelir' ? 'gelir' : 'gider';
+    const months = Math.min(24, Math.max(1, Number(req.query.months) || 6));
+    res.json(reports.categoryPivotTable(data, type, months));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Pivot tablo oluşturulamadı' });
+  }
+});
+
+// Tek bir kategorinin zaman içindeki trendi
+app.get('/api/reports/category-trend', async (req, res) => {
+  try {
+    if (!req.query.category) return res.status(400).json({ error: 'category parametresi zorunlu' });
+    const data = await db.getData();
+    const type = req.query.type === 'gelir' ? 'gelir' : 'gider';
+    const months = Math.min(36, Math.max(1, Number(req.query.months) || 12));
+    res.json(reports.categoryTrend(data, req.query.category, type, months));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Kategori trendi oluşturulamadı' });
+  }
+});
+
+// Aylık gelir/gider/net trend serisi (dashboard çizgi grafiği)
+app.get('/api/reports/trend', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const months = Math.min(36, Math.max(1, Number(req.query.months) || 12));
+    res.json(reports.monthlyTrend(data, months));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Trend oluşturulamadı' });
+  }
+});
+
+// Önümüzdeki N ay için gelir/gider tahmini (doğrusal regresyon + üstel düzeltme)
+app.get('/api/reports/forecast', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const monthsAhead = Math.min(12, Math.max(1, Number(req.query.months) || 3));
+    const historyMonths = Math.min(24, Math.max(2, Number(req.query.historyMonths) || 6));
+    res.json(reports.forecast(data, monthsAhead, historyMonths));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Tahmin oluşturulamadı' });
+  }
+});
+
+// Bütçe limiti vs gerçekleşen harcama karşılaştırması
+app.get('/api/reports/budget', async (req, res) => {
+  try {
+    const data = await db.getData();
+    res.json(reports.budgetVsActual(data, req.query.month || todayISO().slice(0, 7)));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Bütçe karşılaştırması oluşturulamadı' });
+  }
+});
+
+// Karta göre harcama dağılımı
+app.get('/api/reports/cards', async (req, res) => {
+  try {
+    const data = await db.getData();
+    res.json(reports.cardUsageBreakdown(data, req.query.month || todayISO().slice(0, 7)));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Kart kullanım raporu oluşturulamadı' });
+  }
+});
+
+// Önümüzdeki N ay taahhüt edilmiş nakit çıkışı (taksitler + tekrarlayan işlemler)
+app.get('/api/reports/cashflow', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const monthsAhead = Math.min(24, Math.max(1, Number(req.query.months) || 6));
+    res.json(reports.cashflowProjection(data, monthsAhead));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Nakit akışı projeksiyonu oluşturulamadı' });
+  }
+});
+
+// Haftanın günlerine göre harcama alışkanlığı
+app.get('/api/reports/weekday-pattern', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const months = Math.min(24, Math.max(1, Number(req.query.months) || 6));
+    res.json(reports.weekdaySpendingPattern(data, months));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Harcama alışkanlığı raporu oluşturulamadı' });
+  }
+});
+
+// En yüksek tutarlı işlemler
+app.get('/api/reports/top-transactions', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const type = req.query.type === 'gelir' ? 'gelir' : 'gider';
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 10));
+    res.json(reports.topTransactions(data, type, req.query.month || null, limit));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'İşlem listesi oluşturulamadı' });
+  }
+});
+
+// İşlemleri CSV olarak dışa aktar (Excel uyumlu, ; ayraçlı). from/to opsiyonel (YYYY-MM-DD).
+app.get('/api/reports/export.csv', async (req, res) => {
+  try {
+    const data = await db.getData();
+    let txs = data.transactions || [];
+    if (req.query.from) txs = txs.filter((t) => t.date >= req.query.from);
+    if (req.query.to) txs = txs.filter((t) => t.date <= req.query.to);
+    if (req.query.type) txs = txs.filter((t) => t.type === req.query.type);
+    txs = [...txs].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const csv = reports.transactionsToCSV(txs);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="defter-islemler-${todayISO()}.csv"`);
+    res.send('\uFEFF' + csv); // BOM: Excel'in Türkçe karakterleri doğru göstermesi için
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'CSV oluşturulamadı' });
   }
 });
 
