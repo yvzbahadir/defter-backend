@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Defter · Gelir Gider Takip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --ink:#132420;
+    --ink-2:#1B322B;
+    --paper:#F6F1E2;
+    --paper-2:#EFE7D2;
+    --line:#D9CEA9;
+    --gold:#B3843C;
+    --gold-2:#8C6529;
+    --text:#20261F;
+    --muted:#7C7660;
+    --positive:#3E7A50;
+    --negative:#A2402B;
+    --shadow: 0 8px 24px rgba(19,36,32,0.12);
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:'Inter',sans-serif;
+    background:var(--ink);
+    color:var(--text);
+    display:flex;
+    min-height:100vh;
+  }
+  h1,h2,h3,.display{font-family:'Fraunces',serif;}
+  .num{font-family:'JetBrains Mono',monospace; font-variant-numeric: tabular-nums;}
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{
+    width:236px; flex-shrink:0;
+    background: linear-gradient(180deg, var(--ink), var(--ink-2));
+    color:#EFE7D2;
+    display:flex; flex-direction:column;
+    padding:28px 0;
+    position:sticky; top:0; height:100vh;
+  }
+  .brand{
+    padding:0 24px 24px 24px;
+    border-bottom:1px solid rgba(239,231,210,0.14);
+    margin-bottom:18px;
+  }
+  .brand .mark{
+    font-family:'Fraunces',serif; font-weight:700; font-size:28px;
+    color:var(--gold);
+    letter-spacing:0.5px;
+  }
+  .brand .sub{font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:#B7AF95; margin-top:4px;}
+  nav{display:flex; flex-direction:column; gap:2px; padding:0 12px;}
+  nav button{
+    all:unset; cursor:pointer;
+    display:flex; align-items:center; gap:10px;
+    padding:11px 14px; border-radius:8px;
+    font-size:14.5px; font-weight:500; color:#D8D0B8;
+    transition: background .15s, color .15s;
+  }
+  nav button:hover{background:rgba(239,231,210,0.08); color:#fff;}
+  nav button.active{background:var(--gold); color:#1B140A; font-weight:600;}
+  .balance-chip{
+    margin:auto 16px 0 16px; padding:16px;
+    background:rgba(239,231,210,0.06);
+    border:1px solid rgba(239,231,210,0.14);
+    border-radius:10px;
+  }
+  .balance-chip .lbl{font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#B7AF95;}
+  .balance-chip .val{font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:600; margin-top:4px; color:var(--gold);}
+
+  /* ---------- Main ---------- */
+  main{flex:1; background:var(--paper); min-height:100vh; padding:32px 40px 80px 40px;}
+  .page{display:none;}
+  .page.active{display:block;}
+  .page-head{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:22px; flex-wrap:wrap; gap:12px;}
+  .page-head h1{font-size:26px; margin:0; font-weight:600;}
+  .page-head .desc{color:var(--muted); font-size:13.5px; margin-top:4px;}
+
+  .btn{
+    all:unset; cursor:pointer; font-family:'Inter'; font-weight:600; font-size:13.5px;
+    padding:9px 16px; border-radius:7px; background:var(--ink); color:var(--paper);
+    transition: opacity .15s;
+  }
+  .btn:hover{opacity:0.85;}
+  .btn.gold{background:var(--gold); color:#1B140A;}
+  .btn.ghost{background:transparent; color:var(--ink); border:1px solid var(--line);}
+  .btn.danger{background:var(--negative); color:#fff;}
+  .btn.sm{padding:5px 10px; font-size:12px;}
+
+  select, input{
+    font-family:'Inter'; font-size:13.5px; padding:8px 10px;
+    border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--text);
+  }
+
+  /* ---------- Cards / KPI ---------- */
+  .kpi-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:24px;}
+  .kpi{
+    background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px 20px; box-shadow:var(--shadow);
+  }
+  .kpi .lbl{font-size:11.5px; text-transform:uppercase; letter-spacing:0.8px; color:var(--muted); font-weight:600;}
+  .kpi .val{font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:600; margin-top:6px;}
+  .kpi .delta{font-size:12px; margin-top:6px; font-weight:600;}
+  .delta.up{color:var(--positive);} .delta.down{color:var(--negative);}
+  .kpi.income .val{color:var(--positive);}
+  .kpi.expense .val{color:var(--negative);}
+
+  .panel{
+    background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+    padding:20px 22px; margin-bottom:20px; box-shadow:var(--shadow);
+  }
+  .panel h3{margin:0 0 14px 0; font-size:16px; font-weight:600;}
+  .grid-2{display:grid; grid-template-columns:1.3fr 1fr; gap:20px;}
+  .grid-3{display:grid; grid-template-columns:repeat(3,1fr); gap:16px;}
+  @media(max-width:980px){.grid-2,.grid-3{grid-template-columns:1fr;}}
+
+  /* ---------- Ledger table (signature element) ---------- */
+  table.ledger{width:100%; border-collapse:collapse; font-size:13.5px;}
+  table.ledger thead th{
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.6px;
+    color:var(--muted); font-weight:600; padding:8px 10px; border-bottom:2px solid var(--ink);
+  }
+  table.ledger td{padding:9px 10px; border-bottom:1px solid var(--line);}
+  table.ledger tbody tr:hover{background:var(--paper-2);}
+  table.ledger td.num, table.ledger th.num{font-family:'JetBrains Mono',monospace; text-align:right;}
+  table.ledger tr.total td{border-top:1px solid var(--ink); border-bottom:3px double var(--ink); font-weight:700;}
+  table.ledger td.pos{color:var(--positive);}
+  table.ledger td.neg{color:var(--negative);}
+  .bar-cell{display:flex; align-items:center; gap:8px;}
+  .bar-track{flex:1; height:6px; background:var(--paper-2); border-radius:4px; overflow:hidden; min-width:60px;}
+  .bar-fill{height:100%; background:var(--gold);}
+  .bar-fill.risky{background:#D08A2E;}
+  .bar-fill.over{background:var(--negative);}
+  .tag{display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600;}
+  .tag.normal{background:#E4EFE6; color:var(--positive);}
+  .tag.riskli{background:#FBEBD8; color:#8C5A18;}
+  .tag.asildi{background:#F6DCD4; color:var(--negative);}
+  .tag.butcesiz{background:#EDEAE0; color:var(--muted);}
+
+  .chart-wrap{position:relative; height:280px;}
+  .chart-wrap.sm{height:220px;}
+
+  .empty{color:var(--muted); font-size:13.5px; padding:24px; text-align:center;}
+
+  form.inline{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px;}
+  form.inline label{display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); font-weight:600;}
+
+  .row-actions button{margin-right:4px;}
+
+  .modal-bg{position:fixed; inset:0; background:rgba(19,36,32,0.5); display:none; align-items:center; justify-content:center; z-index:50;}
+  .modal-bg.show{display:flex;}
+  .modal{background:#fff; border-radius:12px; padding:26px 28px; width:420px; max-width:92vw; box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+  .modal h3{margin-top:0;}
+  .modal .field{display:flex; flex-direction:column; gap:5px; margin-bottom:12px;}
+  .modal .field label{font-size:12px; color:var(--muted); font-weight:600;}
+  .modal .field input, .modal .field select{width:100%;}
+  .modal .actions{display:flex; justify-content:flex-end; gap:8px; margin-top:18px;}
+
+  .toast{position:fixed; bottom:24px; right:24px; background:var(--ink); color:#fff; padding:12px 18px; border-radius:8px; font-size:13.5px; box-shadow:var(--shadow); z-index:100; display:none;}
+  .toast.show{display:block;}
+
+  .month-picker{display:flex; align-items:center; gap:8px;}
+
+  ::-webkit-scrollbar{width:9px;} ::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="brand">
+    <div class="mark">Defter</div>
+    <div class="sub">Gelir · Gider Takip</div>
+  </div>
+  <nav id="nav">
+    <button data-page="dashboard" class="active">📊 Panel</button>
+    <button data-page="transactions">🧾 İşlemler</button>
+    <button data-page="reports">📈 Raporlar</button>
+    <button data-page="budget">🎯 Bütçe</button>
+    <button data-page="installments">📆 Taksitler</button>
+    <button data-page="recurring">🔁 Tekrarlayanlar</button>
+    <button data-page="cards">💳 Kartlar</button>
+    <button data-page="settings">⚙️ Kategoriler</button>
+  </nav>
+  <div class="balance-chip">
+    <div class="lbl">Genel Bakiye</div>
+    <div class="val num" id="sidebarBalance">₺0,00</div>
+  </div>
+  <button class="btn ghost" id="refreshBtn" style="margin:10px 16px 0 16px; background:transparent; border:1px solid rgba(239,231,210,0.25); color:#EFE7D2;" onclick="manualRefresh()">↻ Yenile</button>
+</aside>
+
+<main>
+
+  <!-- ================= DASHBOARD ================= -->
+  <section class="page active" id="page-dashboard">
+    <div class="page-head">
+      <div>
+        <h1>Panel</h1>
+        <div class="desc">Bu ayın genel görünümü ve son 12 ayın trendi.</div>
+      </div>
+      <div class="month-picker">
+        <input type="month" id="dashMonth" />
+      </div>
+    </div>
+
+    <div class="kpi-grid" id="dashKpis"></div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Gelir / Gider Trendi (12 ay)</h3>
+        <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h3>Kategoriye Göre Giderler</h3>
+        <div class="chart-wrap"><canvas id="catPieChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h3>En Büyük Giderler (bu ay)</h3>
+        <table class="ledger" id="topExpenseTable"><thead><tr><th>Tarih</th><th>Kategori</th><th>Not</th><th class="num">Tutar</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="panel">
+        <h3>Önümüzdeki 6 Ay · Taahhüt Edilmiş Ödemeler</h3>
+        <table class="ledger" id="cashflowTable"><thead><tr><th>Ay</th><th class="num">Taksitler</th><th class="num">Tekrarlayan</th><th class="num">Toplam</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TRANSACTIONS ================= -->
+  <section class="page" id="page-transactions">
+    <div class="page-head">
+      <div><h1>İşlemler</h1><div class="desc">Tüm gelir ve gider kayıtların.</div></div>
+      <div style="display:flex; gap:8px;">
+        <a class="btn ghost" id="exportCsvBtn" href="/api/reports/export.csv">CSV İndir</a>
+        <button class="btn gold" onclick="openTxModal()">+ Yeni İşlem</button>
+      </div>
+    </div>
+
+    <form class="inline">
+      <label>Tür
+        <select id="txFilterType"><option value="">Hepsi</option><option value="gelir">Gelir</option><option value="gider">Gider</option></select>
+      </label>
+      <label>Kategori
+        <select id="txFilterCategory"><option value="">Hepsi</option></select>
+      </label>
+      <label>Ay
+        <input type="month" id="txFilterMonth" />
+      </label>
+      <button type="button" class="btn ghost sm" onclick="renderTransactions()">Filtrele</button>
+    </form>
+
+    <div class="panel" style="padding:0; overflow-x:auto;">
+      <table class="ledger" id="txTable">
+        <thead><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Not</th><th class="num">Tutar</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= REPORTS ================= -->
+  <section class="page" id="page-reports">
+    <div class="page-head">
+      <div><h1>Raporlar</h1><div class="desc">Matematiksel analiz: kategori kırılımı, trend, tahmin, bütçe ve kart raporları.</div></div>
+      <div class="month-picker">
+        <input type="month" id="repMonth" />
+      </div>
+    </div>
+
+    <div class="kpi-grid" id="repKpis"></div>
+
+    <div class="panel">
+      <h3>Aylık Gelir / Gider / Net (son 12 ay)</h3>
+      <div class="chart-wrap"><canvas id="repTrendChart"></canvas></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Gider Kategorisi Kırılımı</h3>
+        <table class="ledger" id="repCatTable">
+          <thead><tr><th>Kategori</th><th class="num">Tutar</th><th class="num">%</th><th class="num">Adet</th><th class="num">Ort.</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h3>Kategori Dağılımı</h3>
+        <div class="chart-wrap sm"><canvas id="repPieChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="panel" style="overflow-x:auto;">
+      <h3>Kategori × Ay Tablosu (son 6 ay)</h3>
+      <table class="ledger" id="pivotTable"><thead></thead><tbody></tbody></table>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Tahmin (Önümüzdeki 3 Ay)</h3>
+        <table class="ledger" id="forecastTable">
+          <thead><tr><th>Ay</th><th class="num">Tahmini Gelir</th><th class="num">Tahmini Gider</th><th class="num">Tahmini Net</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="desc" style="margin-top:10px;">Doğrusal regresyon (trend yönü) ile üstel düzeltmenin (son aylara ağırlık) ortalaması alınarak hesaplanır.</div>
+      </div>
+      <div class="panel">
+        <h3>Karta Göre Harcama</h3>
+        <table class="ledger" id="cardRepTable">
+          <thead><tr><th>Kart</th><th class="num">Tutar</th><th class="num">%</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Haftanın Gününe Göre Harcama Alışkanlığı (son 6 ay)</h3>
+      <div class="chart-wrap sm"><canvas id="weekdayChart"></canvas></div>
+    </div>
+  </section>
+
+  <!-- ================= BUDGET ================= -->
+  <section class="page" id="page-budget">
+    <div class="page-head">
+      <div><h1>Bütçe</h1><div class="desc">Kategori bazlı aylık limitler ve gerçekleşme durumu.</div></div>
+      <div class="month-picker"><input type="month" id="budgetMonth" /></div>
+    </div>
+    <div class="panel" style="overflow-x:auto;">
+      <table class="ledger" id="budgetTable">
+        <thead><tr><th>Kategori</th><th class="num">Limit</th><th class="num">Harcanan</th><th>Kullanım</th><th>Durum</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= INSTALLMENTS ================= -->
+  <section class="page" id="page-installments">
+    <div class="page-head">
+      <div><h1>Taksitler</h1><div class="desc">Taksitli alımların ödeme takvimi.</div></div>
+      <button class="btn gold" onclick="openInstModal()">+ Yeni Taksit</button>
+    </div>
+    <div class="panel" style="overflow-x:auto;">
+      <table class="ledger" id="instTable">
+        <thead><tr><th>Başlık</th><th>Kategori</th><th class="num">Toplam</th><th class="num">Aylık</th><th>İlerleme</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= RECURRING ================= -->
+  <section class="page" id="page-recurring">
+    <div class="page-head">
+      <div><h1>Tekrarlayanlar</h1><div class="desc">Her ay otomatik oluşturulan gelir/gider kayıtları.</div></div>
+      <button class="btn gold" onclick="openRecModal()">+ Yeni Kayıt</button>
+    </div>
+    <div class="panel" style="overflow-x:auto;">
+      <table class="ledger" id="recTable">
+        <thead><tr><th>Başlık</th><th>Tür</th><th>Kategori</th><th class="num">Tutar</th><th>Gün</th><th>Aktif</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= CARDS ================= -->
+  <section class="page" id="page-cards">
+    <div class="page-head">
+      <div><h1>Kartlar</h1><div class="desc">Kayıtlı kredi kartların; Telegram botu harcamaları isimle eşleştirir.</div></div>
+      <button class="btn gold" onclick="openCardModal()">+ Yeni Kart</button>
+    </div>
+    <div class="panel" style="overflow-x:auto;">
+      <table class="ledger" id="cardTable">
+        <thead><tr><th>Kart Adı</th><th>Banka</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= SETTINGS ================= -->
+  <section class="page" id="page-settings">
+    <div class="page-head"><div><h1>Kategoriler</h1><div class="desc">Gelir, gider ve taksit kategori listeleri.</div></div></div>
+    <div class="grid-3" id="catLists"></div>
+
+    <div class="panel" style="margin-top:8px;">
+      <h3>Bakım Araçları</h3>
+      <div class="desc" style="margin-bottom:12px;">Telegram'ın webhook'u zaman zaman aynı onayı tekrar gönderip bir PDF ekstre/fişi çift kaydettirebilir. Bu araç, tür/tarih/tutar/kategori/not olarak birebir aynı olan işlemleri bulup fazlalıkları siler (ilk kaydı korur).</div>
+      <button class="btn ghost" onclick="dedupeTransactions()">Yinelenen İşlemleri Bul ve Temizle</button>
+    </div>
+  </section>
+
+</main>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modalBody"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================== State & helpers ============================== */
+const API = '';
+let DATA = null;
+
+function fmt(n){ return '₺' + Number(n||0).toLocaleString('tr-TR',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function monthNow(){ return todayISO().slice(0,7); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2600); }
+
+async function loadData(){ DATA = await fetch(API+'/api/data').then(r=>r.json()); return DATA; }
+async function saveData(){ await fetch(API+'/api/data', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(DATA)}); }
+async function getJSON(url){ return fetch(API+url).then(r=>r.json()); }
+
+/* ============================== Navigation ============================== */
+let currentPage = 'dashboard';
+document.getElementById('nav').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-page]');
+  if(!btn) return;
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+btn.dataset.page).classList.add('active');
+  currentPage = btn.dataset.page;
+  renderPage(currentPage);
+});
+
+function renderPage(page){
+  if(page==='dashboard') renderDashboard();
+  if(page==='transactions') renderTransactions();
+  if(page==='reports') renderReports();
+  if(page==='budget') renderBudget();
+  if(page==='installments') renderInstallments();
+  if(page==='recurring') renderRecurring();
+  if(page==='cards') renderCards();
+  if(page==='settings') renderSettings();
+}
+
+/**
+ * Telegram botundan (PDF ekstre, fiş, serbest metin) onaylanan işlemler doğrudan
+ * veritabanına yazılıyor; bu sekme onları otomatik görmez çünkü veriyi sadece
+ * sayfa ilk açıldığında çekiyoruz. Bu yüzden periyodik olarak veriyi tazeleyip
+ * o an açık olan sekmeyi yeniden çiziyoruz — Telegram'dan onayladığın bir işlem
+ * en geç ~15 saniye içinde, ya da hemen "Yenile" butonuyla burada görünür.
+ */
+async function refreshData(){
+  await loadData();
+  if(!DATA.categories) DATA.categories = {gelir:[],gider:[],taksit:[]};
+  if(!DATA.cards) DATA.cards=[]; if(!DATA.installments) DATA.installments=[]; if(!DATA.recurring) DATA.recurring=[]; if(!DATA.budgets) DATA.budgets={};
+  renderSidebarBalance();
+  renderPage(currentPage);
+}
+setInterval(() => {
+  if(document.visibilityState === 'visible') refreshData();
+}, 15000);
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible') refreshData();
+});
+
+function renderSidebarBalance(){
+  const txs = DATA.transactions||[];
+  const income = txs.filter(t=>t.type==='gelir').reduce((s,t)=>s+t.amount,0);
+  const expense = txs.filter(t=>t.type==='gider').reduce((s,t)=>s+t.amount,0);
+  document.getElementById('sidebarBalance').textContent = fmt(income-expense);
+}
+
+/* ============================== DASHBOARD ============================== */
+let trendChartInst, catPieChartInst;
+
+async function renderDashboard(){
+  const monthInput = document.getElementById('dashMonth');
+  if(!monthInput.value) monthInput.value = monthNow();
+  monthInput.onchange = renderDashboard;
+  const month = monthInput.value;
+
+  const bundle = await getJSON(`/api/reports/overview?month=${month}&trendMonths=12&forecastMonths=3`);
+  const ov = bundle.overview;
+
+  const kpis = [
+    {cls:'income', lbl:'Bu Ay Gelir', val: fmt(ov.income), delta: ov.incomeChangePct},
+    {cls:'expense', lbl:'Bu Ay Gider', val: fmt(ov.expense), delta: ov.expenseChangePct, invert:true},
+    {cls:'', lbl:'Net', val: fmt(ov.net), delta:null},
+    {cls:'', lbl:'Tasarruf Oranı', val: ov.savingsRate+'%', delta:null},
+  ];
+  document.getElementById('dashKpis').innerHTML = kpis.map(k=>`
+    <div class="kpi ${k.cls}">
+      <div class="lbl">${k.lbl}</div>
+      <div class="val num">${k.val}</div>
+      ${k.delta!==null ? `<div class="delta ${((k.invert?-1:1)*k.delta)>=0?'up':'down'}">${k.delta>=0?'▲':'▼'} %${Math.abs(k.delta)} (geçen aya göre)</div>` : ''}
+    </div>`).join('');
+
+  // trend chart
+  const t = bundle.trend;
+  if(trendChartInst) trendChartInst.destroy();
+  trendChartInst = new Chart(document.getElementById('trendChart'), {
+    type:'line',
+    data:{ labels:t.months, datasets:[
+      {label:'Gelir', data:t.rows.map(r=>r.income), borderColor:'#3E7A50', backgroundColor:'rgba(62,122,80,0.1)', tension:.3, fill:true},
+      {label:'Gider', data:t.rows.map(r=>r.expense), borderColor:'#A2402B', backgroundColor:'rgba(162,64,43,0.08)', tension:.3, fill:true},
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom'}} }
+  });
+
+  // category pie
+  const cat = bundle.expenseByCategory;
+  if(catPieChartInst) catPieChartInst.destroy();
+  catPieChartInst = new Chart(document.getElementById('catPieChart'), {
+    type:'doughnut',
+    data:{ labels: cat.rows.map(r=>r.category), datasets:[{data:cat.rows.map(r=>r.amount), backgroundColor:palette(cat.rows.length)}] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'right'}} }
+  });
+
+  document.getElementById('topExpenseTable').querySelector('tbody').innerHTML =
+    bundle.topExpenses.map(t=>`<tr><td>${t.date}</td><td>${t.category}</td><td>${(t.note||'').slice(0,40)}</td><td class="num neg">-${fmt(t.amount)}</td></tr>`).join('') ||
+    '<tr><td colspan="4" class="empty">Bu ay için gider kaydı yok.</td></tr>';
+
+  document.getElementById('cashflowTable').querySelector('tbody').innerHTML =
+    bundle.cashflow.rows.map(r=>`<tr><td>${r.month}</td><td class="num">${fmt(r.installments)}</td><td class="num">${fmt(r.recurring)}</td><td class="num">${fmt(r.totalCommitted)}</td></tr>`).join('');
+}
+
+function palette(n){
+  const base = ['#B3843C','#3E7A50','#A2402B','#5B7A9D','#8C6529','#6A8C6E','#B36B3C','#3C5B8C','#7C4C8C','#A9A24C'];
+  const out=[]; for(let i=0;i<n;i++) out.push(base[i%base.length]); return out;
+}
+
+/* ============================== TRANSACTIONS ============================== */
+function populateCategoryFilter(){
+  const sel = document.getElementById('txFilterCategory');
+  const all = [...new Set([...(DATA.categories.gelir||[]), ...(DATA.categories.gider||[])])];
+  sel.innerHTML = '<option value="">Hepsi</option>' + all.map(c=>`<option>${c}</option>`).join('');
+}
+
+function renderTransactions(){
+  populateCategoryFilter();
+  const type = document.getElementById('txFilterType').value;
+  const cat = document.getElementById('txFilterCategory').value;
+  const month = document.getElementById('txFilterMonth').value;
+  let txs = [...(DATA.transactions||[])].sort((a,b)=> a.date<b.date?1:-1);
+  if(type) txs = txs.filter(t=>t.type===type);
+  if(cat) txs = txs.filter(t=>t.category===cat);
+  if(month) txs = txs.filter(t=>t.date.slice(0,7)===month);
+
+  document.getElementById('exportCsvBtn').href = '/api/reports/export.csv' + (month?`?from=${month}-01&to=${month}-31`:'');
+
+  const tbody = document.querySelector('#txTable tbody');
+  tbody.innerHTML = txs.length ? txs.map(t=>`
+    <tr>
+      <td>${t.date}</td>
+      <td>${t.type==='gelir'?'Gelir':'Gider'}</td>
+      <td>${t.category}</td>
+      <td>${(t.note||'').slice(0,50)}</td>
+      <td class="num ${t.type==='gelir'?'pos':'neg'}">${t.type==='gelir'?'+':'-'}${fmt(t.amount)}</td>
+      <td class="row-actions"><button class="btn ghost sm" onclick="deleteTx('${t.id}')">Sil</button></td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">Kayıt bulunamadı.</td></tr>';
+}
+
+async function deleteTx(id){
+  if(!confirm('Bu işlemi silmek istediğine emin misin?')) return;
+  DATA.transactions = DATA.transactions.filter(t=>t.id!==id);
+  await saveData(); renderSidebarBalance(); renderTransactions(); toast('İşlem silindi.');
+}
+
+function openTxModal(){
+  const incomeCats = DATA.categories.gelir||[], expenseCats = DATA.categories.gider||[];
+  showModal(`
+    <h3>Yeni İşlem</h3>
+    <div class="field"><label>Tür</label><select id="mTxType" onchange="mTxTypeChanged()"><option value="gider">Gider</option><option value="gelir">Gelir</option></select></div>
+    <div class="field"><label>Tutar</label><input type="number" id="mTxAmount" step="0.01" placeholder="0.00" /></div>
+    <div class="field"><label>Kategori</label><select id="mTxCategory">${expenseCats.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div class="field"><label>Tarih</label><input type="date" id="mTxDate" value="${todayISO()}" /></div>
+    <div class="field"><label>Kart (opsiyonel, sadece gider)</label><select id="mTxCard"><option value="">Nakit / Kartsız</option>${(DATA.cards||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
+    <div class="field"><label>Not</label><input type="text" id="mTxNote" placeholder="opsiyonel" /></div>
+    <div class="actions"><button class="btn ghost" onclick="closeModal()">Vazgeç</button><button class="btn gold" onclick="saveTxModal()">Kaydet</button></div>
+  `);
+  window._incomeCats = incomeCats; window._expenseCats = expenseCats;
+}
+function mTxTypeChanged(){
+  const type = document.getElementById('mTxType').value;
+  const sel = document.getElementById('mTxCategory');
+  sel.innerHTML = (type==='gelir'?window._incomeCats:window._expenseCats).map(c=>`<option>${c}</option>`).join('');
+}
+async function saveTxModal(){
+  const type = document.getElementById('mTxType').value;
+  const amount = parseFloat(document.getElementById('mTxAmount').value);
+  if(!amount || amount<=0){ toast('Geçerli bir tutar gir.'); return; }
+  const tx = {
+    id: uid(), type, amount,
+    category: document.getElementById('mTxCategory').value,
+    date: document.getElementById('mTxDate').value || todayISO(),
+    note: document.getElementById('mTxNote').value || '',
+  };
+  if(type==='gider'){
+    const cardId = document.getElementById('mTxCard').value;
+    if(cardId) tx.cardId = cardId;
+  }
+  DATA.transactions.push(tx);
+  await saveData(); closeModal(); renderSidebarBalance(); renderTransactions(); toast('İşlem kaydedildi.');
+}
+
+/* ============================== REPORTS ============================== */
+let repTrendChartInst, repPieChartInst, weekdayChartInst;
+
+async function renderReports(){
+  const monthInput = document.getElementById('repMonth');
+  if(!monthInput.value) monthInput.value = monthNow();
+  monthInput.onchange = renderReports;
+  const month = monthInput.value;
+
+  const [overview, catBreak, pivot, trend, fc, cardRep, weekday] = await Promise.all([
+    getJSON(`/api/reports/month?month=${month}`),
+    getJSON(`/api/reports/categories?type=gider&month=${month}`),
+    getJSON(`/api/reports/category-pivot?type=gider&months=6`),
+    getJSON(`/api/reports/trend?months=12`),
+    getJSON(`/api/reports/forecast?months=3&historyMonths=6`),
+    getJSON(`/api/reports/cards?month=${month}`),
+    getJSON(`/api/reports/weekday-pattern?months=6`)
+  ]);
+
+  document.getElementById('repKpis').innerHTML = [
+    {lbl:'Gelir', val: fmt(overview.income)}, {lbl:'Gider', val: fmt(overview.expense)},
+    {lbl:'Net', val: fmt(overview.net)}, {lbl:'Ortalama İşlem', val: fmt(overview.avgTransaction)},
+    {lbl:'İşlem Sayısı', val: overview.transactionCount}
+  ].map(k=>`<div class="kpi"><div class="lbl">${k.lbl}</div><div class="val num">${k.val}</div></div>`).join('');
+
+  if(repTrendChartInst) repTrendChartInst.destroy();
+  repTrendChartInst = new Chart(document.getElementById('repTrendChart'), {
+    type:'bar',
+    data:{ labels:trend.months, datasets:[
+      {type:'bar', label:'Gelir', data:trend.rows.map(r=>r.income), backgroundColor:'#3E7A50'},
+      {type:'bar', label:'Gider', data:trend.rows.map(r=>r.expense), backgroundColor:'#A2402B'},
+      {type:'line', label:'Net (kümülatif)', data:trend.rows.map(r=>r.cumulative), borderColor:'#B3843C', yAxisID:'y1', tension:.25}
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      scales:{ y1:{position:'right', grid:{drawOnChartArea:false}} },
+      plugins:{legend:{position:'bottom'}} }
+  });
+
+  document.getElementById('repCatTable').querySelector('tbody').innerHTML = catBreak.rows.map(r=>`
+    <tr><td>${r.category}</td><td class="num neg">${fmt(r.amount)}</td><td class="num">%${r.pct}</td><td class="num">${r.count}</td><td class="num">${fmt(r.avg)}</td></tr>
+  `).join('') + `<tr class="total"><td>Toplam</td><td class="num">${fmt(catBreak.total)}</td><td></td><td></td><td></td></tr>`;
+
+  if(repPieChartInst) repPieChartInst.destroy();
+  repPieChartInst = new Chart(document.getElementById('repPieChart'), {
+    type:'pie',
+    data:{ labels:catBreak.rows.map(r=>r.category), datasets:[{data:catBreak.rows.map(r=>r.amount), backgroundColor:palette(catBreak.rows.length)}] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'right'}} }
+  });
+
+  // Pivot table
+  const thead = document.querySelector('#pivotTable thead');
+  const tbody = document.querySelector('#pivotTable tbody');
+  thead.innerHTML = `<tr><th>Kategori</th>${pivot.months.map(m=>`<th class="num">${m}</th>`).join('')}<th class="num">Toplam</th></tr>`;
+  tbody.innerHTML = pivot.rows.map(r=>`<tr><td>${r.category}</td>${r.values.map(v=>`<td class="num">${v?fmt(v):'—'}</td>`).join('')}<td class="num">${fmt(r.total)}</td></tr>`).join('') +
+    `<tr class="total"><td>Toplam</td>${pivot.totalsByMonth.map(v=>`<td class="num">${fmt(v)}</td>`).join('')}<td class="num">${fmt(pivot.grandTotal)}</td></tr>`;
+
+  document.getElementById('forecastTable').querySelector('tbody').innerHTML = fc.points.map(p=>`
+    <tr><td>${p.month}</td><td class="num pos">${fmt(p.projectedIncome)}</td><td class="num neg">${fmt(p.projectedExpense)}</td><td class="num">${fmt(p.projectedNet)}</td></tr>
+  `).join('');
+
+  document.getElementById('cardRepTable').querySelector('tbody').innerHTML = cardRep.rows.length ? cardRep.rows.map(r=>`
+    <tr><td>${r.name}${r.bank?` (${r.bank})`:''}</td><td class="num">${fmt(r.amount)}</td><td class="num">%${r.pct}</td></tr>
+  `).join('') : '<tr><td colspan="3" class="empty">Bu ay kart harcaması yok.</td></tr>';
+
+  if(weekdayChartInst) weekdayChartInst.destroy();
+  weekdayChartInst = new Chart(document.getElementById('weekdayChart'), {
+    type:'bar',
+    data:{ labels: weekday.rows.map(r=>r.day), datasets:[{label:'Toplam Harcama', data:weekday.rows.map(r=>r.total), backgroundColor:'#B3843C'}] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} }
+  });
+}
+
+/* ============================== BUDGET ============================== */
+async function renderBudget(){
+  const monthInput = document.getElementById('budgetMonth');
+  if(!monthInput.value) monthInput.value = monthNow();
+  monthInput.onchange = renderBudget;
+  const month = monthInput.value;
+  const rep = await getJSON(`/api/reports/budget?month=${month}`);
+
+  document.querySelector('#budgetTable tbody').innerHTML = rep.rows.map(r=>{
+    const statusClass = {normal:'normal', riskli:'riskli', 'aşıldı':'asildi', bütçesiz:'butcesiz'}[r.status];
+    const pct = r.usagePct===null ? 0 : Math.min(100, r.usagePct);
+    const barClass = r.status==='aşıldı' ? 'over' : r.status==='riskli' ? 'risky' : '';
+    return `<tr>
+      <td>${r.category}</td>
+      <td class="num">
+        <input type="number" value="${r.limit||''}" placeholder="limit yok" style="width:90px" onchange="setBudget('${r.category}', this.value)" />
+      </td>
+      <td class="num">${fmt(r.spent)}</td>
+      <td><div class="bar-cell"><div class="bar-track"><div class="bar-fill ${barClass}" style="width:${pct}%"></div></div><span class="num" style="font-size:12px;">${r.usagePct===null?'—':'%'+r.usagePct}</span></div></td>
+      <td><span class="tag ${statusClass}">${r.status}</span></td>
+      <td></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" class="empty">Henüz kategori yok.</td></tr>';
+}
+async function setBudget(category, value){
+  if(!DATA.budgets) DATA.budgets = {};
+  const n = parseFloat(value);
+  if(!n || n<=0) delete DATA.budgets[category]; else DATA.budgets[category] = n;
+  await saveData(); toast('Bütçe güncellendi.'); renderBudget();
+}
+
+/* ============================== INSTALLMENTS ============================== */
+function renderInstallments(){
+  const tbody = document.querySelector('#instTable tbody');
+  const list = DATA.installments||[];
+  tbody.innerHTML = list.length ? list.map(inst=>{
+    const paidCount = (inst.paid||[]).filter(Boolean).length;
+    const monthlyAmt = inst.totalAmount/inst.months;
+    return `<tr>
+      <td>${inst.title}</td><td>${inst.category}</td>
+      <td class="num">${fmt(inst.totalAmount)}</td><td class="num">${fmt(monthlyAmt)}</td>
+      <td>${paidCount}/${inst.months} ödendi</td>
+      <td class="row-actions"><button class="btn ghost sm" onclick="openInstModal('${inst.id}')">Düzenle</button><button class="btn ghost sm" onclick="deleteInst('${inst.id}')">Sil</button></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" class="empty">Kayıtlı taksit yok.</td></tr>';
+}
+async function deleteInst(id){
+  if(!confirm('Bu taksitli kaydı silmek istediğine emin misin? (Oluşturulmuş taksit gider kayıtları etkilenmez.)')) return;
+  DATA.installments = DATA.installments.filter(i=>i.id!==id);
+  await saveData(); renderInstallments(); toast('Taksit silindi.');
+}
+function openInstModal(id){
+  const inst = id ? (DATA.installments||[]).find(i=>i.id===id) : null;
+  showModal(`
+    <h3>${inst ? 'Taksiti Düzenle' : 'Yeni Taksit'}</h3>
+    <div class="field"><label>Başlık</label><input type="text" id="mInstTitle" value="${inst ? inst.title : ''}" placeholder="örn. Buzdolabı" /></div>
+    <div class="field"><label>Kategori</label><select id="mInstCategory">${(DATA.categories.taksit||[]).map(c=>`<option ${inst&&inst.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div class="field"><label>Toplam Tutar</label><input type="number" id="mInstAmount" step="0.01" value="${inst ? inst.totalAmount : ''}" /></div>
+    <div class="field"><label>Taksit Sayısı</label><input type="number" id="mInstMonths" value="${inst ? inst.months : 1}" min="1" /></div>
+    <div class="field"><label>Başlangıç Tarihi</label><input type="date" id="mInstDate" value="${inst ? inst.startDate : todayISO()}" /></div>
+    <div class="field"><label>Kart (opsiyonel)</label><select id="mInstCard"><option value="">Yok</option>${(DATA.cards||[]).map(c=>`<option value="${c.id}" ${inst&&inst.cardId===c.id?'selected':''}>${c.name}</option>`).join('')}</select></div>
+    ${inst ? '<div class="desc" style="margin-bottom:6px; font-size:12px;">Taksit sayısını değiştirirsen, henüz ödenmemiş aylar buna göre yeniden düzenlenir.</div>' : ''}
+    <div class="actions"><button class="btn ghost" onclick="closeModal()">Vazgeç</button><button class="btn gold" onclick="saveInstModal('${id||''}')">Kaydet</button></div>
+  `);
+}
+async function saveInstModal(id){
+  const totalAmount = parseFloat(document.getElementById('mInstAmount').value);
+  const months = parseInt(document.getElementById('mInstMonths').value)||1;
+  if(!totalAmount || totalAmount<=0){ toast('Geçerli tutar gir.'); return; }
+  const title = document.getElementById('mInstTitle').value || 'Taksit';
+  const category = document.getElementById('mInstCategory').value;
+  const startDate = document.getElementById('mInstDate').value || todayISO();
+  const cardId = document.getElementById('mInstCard').value || undefined;
+
+  if(id){
+    const inst = DATA.installments.find(i=>i.id===id);
+    if(inst){
+      inst.title = title; inst.category = category; inst.totalAmount = totalAmount;
+      inst.startDate = startDate; inst.cardId = cardId;
+      const oldMonths = inst.months;
+      inst.months = months;
+      if(!inst.paid) inst.paid = [];
+      if(!inst.paidTx) inst.paidTx = [];
+      if(months > oldMonths){
+        while(inst.paid.length < months) inst.paid.push(false);
+        while(inst.paidTx.length < months) inst.paidTx.push(null);
+      } else if(months < oldMonths){
+        inst.paid = inst.paid.slice(0, months);
+        inst.paidTx = inst.paidTx.slice(0, months);
+      }
+    }
+  } else {
+    if(!DATA.installments) DATA.installments=[];
+    DATA.installments.push({
+      id: uid(), title, category, totalAmount, months, startDate, cardId,
+      paid: new Array(months).fill(false), paidTx: new Array(months).fill(null)
+    });
+  }
+  await saveData(); closeModal(); renderInstallments(); toast(id ? 'Taksit güncellendi.' : 'Taksit eklendi.');
+}
+
+/* ============================== RECURRING ============================== */
+function renderRecurring(){
+  const tbody = document.querySelector('#recTable tbody');
+  const list = DATA.recurring||[];
+  tbody.innerHTML = list.length ? list.map(r=>`
+    <tr>
+      <td>${r.title||r.note||'—'}</td><td>${r.type==='gelir'?'Gelir':'Gider'}</td><td>${r.category}</td>
+      <td class="num ${r.type==='gelir'?'pos':'neg'}">${fmt(r.amount)}</td><td>${r.dayOfMonth}</td>
+      <td><input type="checkbox" ${r.active?'checked':''} onchange="toggleRecurring('${r.id}', this.checked)" /></td>
+      <td class="row-actions"><button class="btn ghost sm" onclick="openRecModal('${r.id}')">Düzenle</button><button class="btn ghost sm" onclick="deleteRec('${r.id}')">Sil</button></td>
+    </tr>`).join('') : '<tr><td colspan="7" class="empty">Kayıtlı tekrarlayan işlem yok.</td></tr>';
+}
+async function toggleRecurring(id, val){
+  const r = (DATA.recurring||[]).find(x=>x.id===id); if(r){ r.active=val; await saveData(); toast('Güncellendi.'); }
+}
+async function deleteRec(id){
+  if(!confirm('Bu tekrarlayan kaydı silmek istediğine emin misin?')) return;
+  DATA.recurring = DATA.recurring.filter(r=>r.id!==id);
+  await saveData(); renderRecurring(); toast('Silindi.');
+}
+function openRecModal(id){
+  const rec = id ? (DATA.recurring||[]).find(r=>r.id===id) : null;
+  const type = rec ? rec.type : 'gider';
+  showModal(`
+    <h3>${rec ? 'Tekrarlayan İşlemi Düzenle' : 'Yeni Tekrarlayan İşlem'}</h3>
+    <div class="field"><label>Başlık</label><input type="text" id="mRecTitle" value="${rec ? (rec.title||'') : ''}" placeholder="örn. Kira" /></div>
+    <div class="field"><label>Tür</label><select id="mRecType" onchange="mRecTypeChanged()"><option value="gider" ${type==='gider'?'selected':''}>Gider</option><option value="gelir" ${type==='gelir'?'selected':''}>Gelir</option></select></div>
+    <div class="field"><label>Kategori</label><select id="mRecCategory">${(type==='gelir'?DATA.categories.gelir:DATA.categories.gider).map(c=>`<option ${rec&&rec.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div class="field"><label>Tutar</label><input type="number" id="mRecAmount" step="0.01" value="${rec ? rec.amount : ''}" /></div>
+    <div class="field"><label>Ayın Günü</label><input type="number" id="mRecDay" value="${rec ? rec.dayOfMonth : 1}" min="1" max="28" /></div>
+    <div class="field"><label>Başlangıç Tarihi</label><input type="date" id="mRecStart" value="${rec ? rec.startDate : todayISO()}" /></div>
+    <div class="actions"><button class="btn ghost" onclick="closeModal()">Vazgeç</button><button class="btn gold" onclick="saveRecModal('${id||''}')">Kaydet</button></div>
+  `);
+}
+function mRecTypeChanged(){
+  const type = document.getElementById('mRecType').value;
+  document.getElementById('mRecCategory').innerHTML = (type==='gelir'?DATA.categories.gelir:DATA.categories.gider).map(c=>`<option>${c}</option>`).join('');
+}
+async function saveRecModal(id){
+  const amount = parseFloat(document.getElementById('mRecAmount').value);
+  if(!amount || amount<=0){ toast('Geçerli tutar gir.'); return; }
+  const title = document.getElementById('mRecTitle').value || 'Tekrarlayan işlem';
+  const type = document.getElementById('mRecType').value;
+  const category = document.getElementById('mRecCategory').value;
+  const dayOfMonth = parseInt(document.getElementById('mRecDay').value)||1;
+  const startDate = document.getElementById('mRecStart').value || todayISO();
+  if(id){
+    const rec = DATA.recurring.find(r=>r.id===id);
+    if(rec){ rec.title=title; rec.type=type; rec.category=category; rec.amount=amount; rec.dayOfMonth=dayOfMonth; rec.startDate=startDate; }
+  } else {
+    if(!DATA.recurring) DATA.recurring=[];
+    DATA.recurring.push({ id: uid(), title, type, category, amount, dayOfMonth, startDate, active:true });
+  }
+  await saveData(); closeModal(); renderRecurring(); toast(id ? 'Güncellendi.' : 'Eklendi.');
+}
+
+/* ============================== CARDS ============================== */
+function renderCards(){
+  const tbody = document.querySelector('#cardTable tbody');
+  const list = DATA.cards||[];
+  tbody.innerHTML = list.length ? list.map(c=>`
+    <tr><td>${c.name}</td><td>${c.bank||'—'}</td>
+    <td class="row-actions"><button class="btn ghost sm" onclick="openCardModal('${c.id}')">Düzenle</button><button class="btn ghost sm" onclick="deleteCard('${c.id}')">Sil</button></td></tr>
+  `).join('') : '<tr><td colspan="3" class="empty">Kayıtlı kart yok.</td></tr>';
+}
+async function deleteCard(id){
+  if(!confirm('Bu kartı silmek istediğine emin misin? (Bu karta bağlı geçmiş işlemler etkilenmez.)')) return;
+  DATA.cards = DATA.cards.filter(c=>c.id!==id);
+  await saveData(); renderCards(); toast('Kart silindi.');
+}
+function openCardModal(id){
+  const card = id ? (DATA.cards||[]).find(c=>c.id===id) : null;
+  showModal(`
+    <h3>${card ? 'Kartı Düzenle' : 'Yeni Kart'}</h3>
+    <div class="field"><label>Kart Adı</label><input type="text" id="mCardName" value="${card ? card.name : ''}" placeholder="örn. Akbank" /></div>
+    <div class="field"><label>Banka</label><input type="text" id="mCardBank" value="${card ? (card.bank||'') : ''}" placeholder="örn. Akbank" /></div>
+    <div class="actions"><button class="btn ghost" onclick="closeModal()">Vazgeç</button><button class="btn gold" onclick="saveCardModal('${id||''}')">Kaydet</button></div>
+  `);
+}
+async function saveCardModal(id){
+  const name = document.getElementById('mCardName').value.trim();
+  if(!name){ toast('Kart adı gir.'); return; }
+  const bank = document.getElementById('mCardBank').value.trim();
+  if(id){
+    const card = DATA.cards.find(c=>c.id===id);
+    if(card){ card.name = name; card.bank = bank; }
+  } else {
+    if(!DATA.cards) DATA.cards=[];
+    DATA.cards.push({ id: uid(), name, bank });
+  }
+  await saveData(); closeModal(); renderCards(); toast(id ? 'Kart güncellendi.' : 'Kart eklendi.');
+}
+
+/* ============================== SETTINGS (categories) ============================== */
+
+/** Bir kategorinin kaç kayıtta (işlem/tekrarlayan/taksit/bütçe) kullanıldığını sayar. */
+function categoryUsageCount(key, name){
+  if(key==='taksit'){
+    return (DATA.installments||[]).filter(i=>i.category===name).length;
+  }
+  const txCount = (DATA.transactions||[]).filter(t=>t.type===key && t.category===name).length;
+  const recCount = (DATA.recurring||[]).filter(r=>r.type===key && r.category===name).length;
+  const budgetCount = (DATA.budgets && DATA.budgets[name] !== undefined) ? 1 : 0;
+  return txCount + recCount + budgetCount;
+}
+
+function esc(s){ return String(s).replace(/'/g, "\\'"); }
+
+function renderSettings(){
+  const groups = [ {key:'gelir', label:'Gelir Kategorileri'}, {key:'gider', label:'Gider Kategorileri'}, {key:'taksit', label:'Taksit Kategorileri'} ];
+  document.getElementById('catLists').innerHTML = groups.map(g=>`
+    <div class="panel">
+      <h3>${g.label}</h3>
+      <table class="ledger"><tbody>
+        ${(DATA.categories[g.key]||[]).map(c=>{
+          const usage = categoryUsageCount(g.key, c);
+          return `<tr>
+            <td>${c}${usage ? ` <span style="color:var(--muted); font-size:11.5px;">(${usage} kayıtta kullanılıyor)</span>` : ''}</td>
+            <td class="row-actions" style="text-align:right; white-space:nowrap;">
+              <button class="btn ghost sm" onclick="renameCategory('${g.key}','${esc(c)}')">Düzenle</button>
+              <button class="btn ghost sm" onclick="removeCategory('${g.key}','${esc(c)}')">Sil</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody></table>
+      <form class="inline" style="margin-top:12px;" onsubmit="event.preventDefault(); addCategory('${g.key}', this.querySelector('input').value); this.querySelector('input').value='';">
+        <input type="text" placeholder="yeni kategori" style="flex:1" />
+        <button class="btn ghost sm" type="submit">Ekle</button>
+      </form>
+    </div>
+  `).join('');
+}
+
+async function addCategory(key, value){
+  value = (value||'').trim(); if(!value) return;
+  if(!DATA.categories[key].includes(value)) DATA.categories[key].push(value);
+  await saveData(); renderSettings(); toast('Kategori eklendi.');
+}
+
+/** Kategoriyi yeniden adlandır: listedeki ismi ve onu kullanan tüm kayıtları (işlem, tekrarlayan, taksit, bütçe) günceller. */
+function renameCategory(key, oldName){
+  showModal(`
+    <h3>Kategoriyi Yeniden Adlandır</h3>
+    <div class="field"><label>Yeni Ad</label><input type="text" id="mCatNewName" value="${oldName}" /></div>
+    <div class="desc" style="margin-bottom:10px; font-size:12.5px;">Bu kategoriyi kullanan tüm işlemler, tekrarlayanlar, taksitler ve bütçe limiti otomatik olarak yeni isme güncellenir.</div>
+    <div class="actions"><button class="btn ghost" onclick="closeModal()">Vazgeç</button><button class="btn gold" onclick="confirmRenameCategory('${key}','${esc(oldName)}')">Kaydet</button></div>
+  `);
+}
+async function confirmRenameCategory(key, oldName){
+  const newName = document.getElementById('mCatNewName').value.trim();
+  if(!newName){ toast('Geçerli bir ad gir.'); return; }
+  if(newName === oldName){ closeModal(); return; }
+  if(DATA.categories[key].includes(newName)){ toast('Bu isimde bir kategori zaten var — bunun yerine "Sil" ile birleştirebilirsin.'); return; }
+
+  DATA.categories[key] = DATA.categories[key].map(c => c === oldName ? newName : c);
+  if(key === 'taksit'){
+    (DATA.installments||[]).forEach(i => { if(i.category === oldName) i.category = newName; });
+  } else {
+    (DATA.transactions||[]).forEach(t => { if(t.type === key && t.category === oldName) t.category = newName; });
+    (DATA.recurring||[]).forEach(r => { if(r.type === key && r.category === oldName) r.category = newName; });
+    if(DATA.budgets && DATA.budgets[oldName] !== undefined){
+      DATA.budgets[newName] = DATA.budgets[oldName];
+      delete DATA.budgets[oldName];
+    }
+  }
+  await saveData(); closeModal(); renderSettings(); toast('Kategori güncellendi, ilgili tüm kayıtlar taşındı.');
+}
+
+/**
+ * Kategoriyi siler. Kullanılmıyorsa direkt silinir. Kullanılıyorsa, önce hangi
+ * kategoriye taşınacağını sorar (aksi halde eski kayıtlar geçersiz bir kategori
+ * adına sahip kalır ve raporlarda "hayalet" kategori olarak görünürdü).
+ */
+async function removeCategory(key, value){
+  const usage = categoryUsageCount(key, value);
+  if(usage === 0){
+    if(!confirm(`"${value}" kategorisini silmek istediğine emin misin?`)) return;
+    DATA.categories[key] = DATA.categories[key].filter(c => c !== value);
+    await saveData(); renderSettings(); toast('Kategori silindi.');
+    return;
+  }
+  const others = DATA.categories[key].filter(c => c !== value);
+  if(others.length === 0){
+    toast(`"${value}" ${usage} kayıtta kullanılıyor ve taşınabilecek başka kategori yok. Önce yeni bir kategori ekle.`);
+    return;
+  }
+  showModal(`
+    <h3>Kategoriyi Sil</h3>
+    <div class="desc" style="margin-bottom:12px; font-size:12.5px;">"${value}" kategorisi ${usage} kayıtta kullanılıyor. Silmeden önce bu kayıtları başka bir kategoriye taşımalısın; aksi halde raporlarda eski isimle "hayalet" kategori olarak görünürlerdi.</div>
+    <div class="field"><label>Kayıtları şu kategoriye taşı</label><select id="mCatReassign">${others.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div class="actions"><button class="btn ghost" onclick="closeModal()">Vazgeç</button><button class="btn danger" onclick="confirmRemoveCategory('${key}','${esc(value)}')">Taşı ve Sil</button></div>
+  `);
+}
+async function confirmRemoveCategory(key, value){
+  const newCat = document.getElementById('mCatReassign').value;
+  if(key === 'taksit'){
+    (DATA.installments||[]).forEach(i => { if(i.category === value) i.category = newCat; });
+  } else {
+    (DATA.transactions||[]).forEach(t => { if(t.type === key && t.category === value) t.category = newCat; });
+    (DATA.recurring||[]).forEach(r => { if(r.type === key && r.category === value) r.category = newCat; });
+    if(DATA.budgets && DATA.budgets[value] !== undefined){
+      DATA.budgets[newCat] = (DATA.budgets[newCat] || 0) + DATA.budgets[value];
+      delete DATA.budgets[value];
+    }
+  }
+  DATA.categories[key] = DATA.categories[key].filter(c => c !== value);
+  await saveData(); closeModal(); renderSettings(); toast('Kategori silindi, kayıtlar yeni kategoriye taşındı.');
+}
+
+/* ============================== Modal helpers ============================== */
+function showModal(html){ document.getElementById('modalBody').innerHTML = html; document.getElementById('modalBg').classList.add('show'); }
+function closeModal(){ document.getElementById('modalBg').classList.remove('show'); }
+document.getElementById('modalBg').addEventListener('click', (e)=>{ if(e.target.id==='modalBg') closeModal(); });
+
+async function dedupeTransactions(){
+  if(!confirm('Birebir aynı (tür, tarih, tutar, kategori, not) işlemler bulunup fazlalıkları silinecek. Devam edilsin mi?')) return;
+  const res = await fetch(API+'/api/maintenance/dedupe-transactions', {method:'POST'}).then(r=>r.json());
+  if(res.ok){
+    if(res.removed > 0){
+      toast(`${res.removed} adet yinelenen işlem silindi.`);
+      await refreshData();
+    } else {
+      toast('Yinelenen işlem bulunamadı.');
+    }
+  } else {
+    toast('Temizleme başarısız oldu.');
+  }
+}
+
+async function manualRefresh(){
+  const btn = document.getElementById('refreshBtn');
+  const original = btn.textContent;
+  btn.textContent = '↻ Yenileniyor...';
+  await refreshData();
+  btn.textContent = original;
+  toast('Veri güncellendi.');
+}
+
+/* ============================== Init ============================== */
+(async function init(){
+  await loadData();
+  if(!DATA.categories) DATA.categories = {gelir:[],gider:[],taksit:[]};
+  if(!DATA.cards) DATA.cards=[]; if(!DATA.installments) DATA.installments=[]; if(!DATA.recurring) DATA.recurring=[]; if(!DATA.budgets) DATA.budgets={};
+  renderSidebarBalance();
+  renderDashboard();
+})();
+</script>
+</body>
+</html>
