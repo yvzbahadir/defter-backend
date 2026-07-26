@@ -426,9 +426,19 @@ function removeLastTelegramTransaction(data) {
 }
 
 /* ---------- REST API (web arayüzü için) ---------- */
+// Önceden bu üretim yalnızca dışarıdan (cron-job.org vb.) tetiklenen /cron/daily-check
+// endpoint'ine bağlıydı; o kurulmadığı sürece "Tekrarlayanlar"da tanımlanan kurallar hiçbir
+// zaman gerçek gelir/gider kaydına dönüşmüyordu. Artık web arayüzü her veri çektiğinde
+// (sayfa açılışı, "Yenile", ya da periyodik refreshData) burada da aynı üretim çalışıyor;
+// böylece dış bir cron kurulmasa bile vadesi gelen tekrarlar ve taksitler kendiliğinden oluşuyor.
 app.get('/api/data', async (req, res) => {
   try {
     const data = await db.getData();
+    const generated = generateRecurringTransactionsServer(data);
+    const generatedInstallments = generateInstallmentTransactionsServer(data);
+    if (generated.length || generatedInstallments.length) {
+      await db.setData(data);
+    }
     res.json(data);
   } catch (e) {
     console.error(e);
