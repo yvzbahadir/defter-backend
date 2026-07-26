@@ -1,0 +1,162 @@
+diff --git a/public/index.html b/public/index.html
+index 977ad32..a469ca9 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -368,15 +368,10 @@
+   <!-- ================= CARDS ================= -->
+   <section class="page" id="page-cards">
+     <div class="page-head">
+-      <div><h1>Kartlar</h1><div class="desc">Kayıtlı kredi kartların; Telegram botu harcamaları isimle eşleştirir.</div></div>
++      <div><h1>Kartlar</h1><div class="desc">Kayıtlı kredi kartların; limit ve hesap kesim gününe göre ekstre dönemi takibi.</div></div>
+       <button class="btn gold" onclick="openCardModal()">+ Yeni Kart</button>
+     </div>
+-    <div class="panel" style="overflow-x:auto;">
+-      <table class="ledger" id="cardTable">
+-        <thead><tr><th>Kart Adı</th><th>Banka</th><th></th></tr></thead>
+-        <tbody></tbody>
+-      </table>
+-    </div>
++    <div id="cardsPanels"></div>
+   </section>
+ 
+   <!-- ================= SETTINGS ================= -->
+@@ -826,25 +821,113 @@ async function saveRecModal(id){
+ }
+ 
+ /* ============================== CARDS ============================== */
++
++/** Bir tarihi, kartın hesap kesim gününe göre hangi ekstre dönemine düştüğünü hesaplar.
++ *  Kesim günü tanımlı değilse takvim ayını (YYYY-MM) döner. Bu, kartla yapılan giderlerin
++ *  "Giderler" tarafıyla ekstre dönemine göre entegre çalışmasını sağlayan temel fonksiyondur. */
++function statementKeyForCard(card, dateStr){
++  const d = new Date(dateStr);
++  if(!card.statementDay) return dateStr.slice(0,7);
++  let m = d.getMonth(), y = d.getFullYear();
++  if(d.getDate() > card.statementDay){ m += 1; if(m>11){ m=0; y+=1; } }
++  return y + '-' + String(m+1).padStart(2,'0');
++}
++function statementKeyLabel(key){
++  const [y,m] = key.split('-').map(Number);
++  return new Date(y, m-1, 1).toLocaleDateString('tr-TR', {month:'long', year:'numeric'});
++}
++
+ function renderCards(){
+-  const tbody = document.querySelector('#cardTable tbody');
++  const container = document.getElementById('cardsPanels');
+   const list = DATA.cards||[];
+-  tbody.innerHTML = list.length ? list.map(c=>`
+-    <tr><td>${c.name}</td><td>${c.bank||'—'}</td>
+-    <td class="row-actions"><button class="btn ghost sm" onclick="openCardModal('${c.id}')">Düzenle</button><button class="btn ghost sm" onclick="deleteCard('${c.id}')">Sil</button></td></tr>
+-  `).join('') : '<tr><td colspan="3" class="empty">Kayıtlı kart yok.</td></tr>';
++  if(!list.length){ container.innerHTML = '<div class="panel"><div class="empty">Kayıtlı kart yok. "+ Yeni Kart" ile ekleyebilirsin.</div></div>'; return; }
++  const todayKey = todayISO();
++  container.innerHTML = list.map(card=>{
++    if(!card.statements) card.statements = {};
++    const txs = (DATA.transactions||[]).filter(t=>t.type==='gider' && t.cardId===card.id).sort((a,b)=> b.date<a.date?-1:1);
++    const totalUsage = txs.reduce((s,t)=>s+t.amount,0);
++    const currentKey = statementKeyForCard(card, todayKey);
++    const currentAmount = txs.filter(t=>statementKeyForCard(card,t.date)===currentKey).reduce((s,t)=>s+t.amount,0);
++    const currentPaid = !!card.statements[currentKey];
++    const pastKeys = [...new Set(txs.map(t=>statementKeyForCard(card,t.date)))].filter(k=>k<currentKey).sort();
++    let unpaidPastDebt = 0;
++    pastKeys.forEach(k=>{ if(!card.statements[k]) unpaidPastDebt += txs.filter(t=>statementKeyForCard(card,t.date)===k).reduce((s,t)=>s+t.amount,0); });
++    const futureDebt = txs.filter(t=>statementKeyForCard(card,t.date)>currentKey).reduce((s,t)=>s+t.amount,0);
++    const totalOutstanding = unpaidPastDebt + currentAmount + futureDebt;
++    const hasLimit = !!card.limit;
++    const utilPct = hasLimit ? Math.round((totalOutstanding/card.limit)*100) : 0;
++    const barClass = utilPct>=100 ? 'over' : utilPct>=80 ? 'risky' : '';
++    const remaining = hasLimit ? fmt(card.limit - totalOutstanding) : null;
++
++    const recentRows = txs.slice(0,6).map(t=>`
++      <tr><td>${t.date}</td><td>${t.category}</td><td>${(t.note||'').slice(0,40)}</td><td class="num neg">-${fmt(t.amount)}</td></tr>
++    `).join('') || '<tr><td colspan="4" class="empty">Bu karta henüz gider eklenmedi.</td></tr>';
++
++    return `
++    <div class="panel">
++      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
++        <div>
++          <h3 style="margin:0;">${card.name}</h3>
++          <div class="desc" style="margin-top:2px;">${card.bank||'—'}${card.statementDay?' · hesap kesim günü: '+card.statementDay:' · hesap kesim günü tanımlı değil (takvim ayı kullanılıyor)'}</div>
++        </div>
++        <div class="row-actions">
++          <button class="btn ghost sm" onclick="openCardModal('${card.id}')">Düzenle</button>
++          <button class="btn ghost sm" onclick="deleteCard('${card.id}')">Sil</button>
++        </div>
++      </div>
++
++      <div class="kpi-grid" style="margin-top:14px; margin-bottom:14px;">
++        <div class="kpi"><div class="lbl">Limit</div><div class="val num">${hasLimit?fmt(card.limit):'—'}</div></div>
++        <div class="kpi"><div class="lbl">Güncel Ekstre (${statementKeyLabel(currentKey)})</div><div class="val num">${fmt(currentAmount)}</div></div>
++        <div class="kpi"><div class="lbl">Kalan Limit</div><div class="val num" style="color:${hasLimit && (card.limit-totalOutstanding)<0 ? 'var(--negative)':'inherit'}">${remaining ?? '—'}</div></div>
++      </div>
++
++      ${hasLimit ? `
++      <div class="bar-cell" style="margin-bottom:14px;">
++        <div class="bar-track"><div class="bar-fill ${barClass}" style="width:${Math.min(100,utilPct)}%"></div></div>
++        <span class="num" style="font-size:12px; min-width:44px;">%${utilPct}</span>
++      </div>` : ''}
++
++      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; background:var(--paper-2); border-radius:8px; margin-bottom:14px;">
++        <div>
++          <span class="tag ${currentPaid?'normal':'riskli'}">${currentPaid?'Bu ekstre ödendi':'Bu ekstre ödenmedi'}</span>
++          ${unpaidPastDebt>0?`<span class="tag asildi" style="margin-left:6px;">Geçmiş ödenmemiş: ${fmt(unpaidPastDebt)}</span>`:''}
++          ${futureDebt>0?`<span class="tag butcesiz" style="margin-left:6px;">Gelecek taksit yükü: ${fmt(futureDebt)}</span>`:''}
++        </div>
++        <button class="btn ghost sm" onclick="toggleCardStatement('${card.id}','${currentKey}')">${currentPaid?'Ödenmedi olarak işaretle':'Bu ekstreyi ödendi işaretle'}</button>
++      </div>
++
++      <table class="ledger">
++        <thead><tr><th>Tarih</th><th>Kategori</th><th>Not</th><th class="num">Tutar</th></tr></thead>
++        <tbody>${recentRows}</tbody>
++      </table>
++      <div class="desc" style="margin-top:10px;">Toplam harcama (tüm zamanlar): <strong class="num">${fmt(totalUsage)}</strong> · ${txs.length} işlem</div>
++    </div>`;
++  }).join('');
++}
++async function toggleCardStatement(cardId, key){
++  const card = (DATA.cards||[]).find(c=>c.id===cardId);
++  if(!card) return;
++  if(!card.statements) card.statements = {};
++  card.statements[key] = !card.statements[key];
++  await saveData(); renderCards(); toast('Ekstre durumu güncellendi.');
+ }
+ async function deleteCard(id){
+-  if(!confirm('Bu kartı silmek istediğine emin misin? (Bu karta bağlı geçmiş işlemler etkilenmez.)')) return;
++  if(!confirm('Bu kartı silmek istediğine emin misin? (Bu karta bağlı geçmiş işlemler etkilenmez, sadece kart bağlantısı kaldırılır.)')) return;
+   DATA.cards = DATA.cards.filter(c=>c.id!==id);
++  (DATA.transactions||[]).forEach(t=>{ if(t.cardId===id) delete t.cardId; });
++  (DATA.installments||[]).forEach(i=>{ if(i.cardId===id) i.cardId = null; });
+   await saveData(); renderCards(); toast('Kart silindi.');
+ }
+ function openCardModal(id){
+   const card = id ? (DATA.cards||[]).find(c=>c.id===id) : null;
+   showModal(`
+     <h3>${card ? 'Kartı Düzenle' : 'Yeni Kart'}</h3>
+-    <div class="field"><label>Kart Adı</label><input type="text" id="mCardName" value="${card ? card.name : ''}" placeholder="örn. Akbank" /></div>
+-    <div class="field"><label>Banka</label><input type="text" id="mCardBank" value="${card ? (card.bank||'') : ''}" placeholder="örn. Akbank" /></div>
++    <div class="field"><label>Kart Adı</label><input type="text" id="mCardName" value="${card ? card.name : ''}" placeholder="örn. Bonus Kart" /></div>
++    <div class="field"><label>Banka</label><input type="text" id="mCardBank" value="${card ? (card.bank||'') : ''}" placeholder="örn. Garanti BBVA" /></div>
++    <div class="field"><label>Kredi Limiti (₺)</label><input type="number" id="mCardLimit" step="0.01" value="${card ? (card.limit||'') : ''}" placeholder="0.00" /></div>
++    <div class="field"><label>Hesap Kesim Günü</label><input type="number" id="mCardStatementDay" min="1" max="31" value="${card ? (card.statementDay||'') : ''}" placeholder="örn. 15" /></div>
++    <div class="desc" style="margin-bottom:6px; font-size:12px;">Hesap kesim günü girersen, bu karta ait giderler ekstre dönemine göre gruplanır (takvim ayı yerine).</div>
+     <div class="actions"><button class="btn ghost" onclick="closeModal()">Vazgeç</button><button class="btn gold" onclick="saveCardModal('${id||''}')">Kaydet</button></div>
+   `);
+ }
+@@ -852,12 +935,15 @@ async function saveCardModal(id){
+   const name = document.getElementById('mCardName').value.trim();
+   if(!name){ toast('Kart adı gir.'); return; }
+   const bank = document.getElementById('mCardBank').value.trim();
++  const limit = parseFloat(document.getElementById('mCardLimit').value) || 0;
++  const statementDayRaw = parseInt(document.getElementById('mCardStatementDay').value);
++  const statementDay = (statementDayRaw>=1 && statementDayRaw<=31) ? statementDayRaw : null;
+   if(id){
+     const card = DATA.cards.find(c=>c.id===id);
+-    if(card){ card.name = name; card.bank = bank; }
++    if(card){ card.name = name; card.bank = bank; card.limit = limit; card.statementDay = statementDay; }
+   } else {
+     if(!DATA.cards) DATA.cards=[];
+-    DATA.cards.push({ id: uid(), name, bank });
++    DATA.cards.push({ id: uid(), name, bank, limit, statementDay, statements: {} });
+   }
+   await saveData(); closeModal(); renderCards(); toast(id ? 'Kart güncellendi.' : 'Kart eklendi.');
+ }
