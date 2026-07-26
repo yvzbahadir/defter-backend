@@ -630,6 +630,137 @@ app.get('/api/reports/top-transactions', async (req, res) => {
   }
 });
 
+/* ---------- REST API: Yeni matematiksel analizler ---------- */
+
+// Kategori bazlı anomali tespiti (z-score): bu ay, geçmiş ortalamaya göre olağandışı kategoriler
+app.get('/api/reports/anomalies', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const monthKey = req.query.month || todayISO().slice(0, 7);
+    const historyMonths = Math.min(24, Math.max(2, Number(req.query.historyMonths) || 6));
+    const zThreshold = Math.max(1, Number(req.query.zThreshold) || 2);
+    res.json(reports.anomalyDetection(data, monthKey, { historyMonths, zThreshold }));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Anomali tespiti oluşturulamadı' });
+  }
+});
+
+// İşlem bazında olağandışı (kendi kategorisinin tipik tutarından çok sapan) kayıtlar
+app.get('/api/reports/unusual-transactions', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const monthKey = req.query.month || todayISO().slice(0, 7);
+    const zThreshold = Math.max(1, Number(req.query.zThreshold) || 2);
+    res.json(reports.unusualTransactions(data, monthKey, { zThreshold }));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Olağandışı işlem taraması oluşturulamadı' });
+  }
+});
+
+// 0-100 arası finansal sağlık skoru (tasarruf oranı + bütçe disiplini + gelir istikrarı + taahhüt yükü)
+app.get('/api/reports/health-score', async (req, res) => {
+  try {
+    const data = await db.getData();
+    res.json(reports.financialHealthScore(data, req.query.month || todayISO().slice(0, 7)));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Finansal sağlık skoru oluşturulamadı' });
+  }
+});
+
+// Takvim ayına göre mevsimsellik endeksi (100 = ortalama, üstü/altı sapma)
+app.get('/api/reports/seasonality', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const type = req.query.type === 'gelir' ? 'gelir' : 'gider';
+    res.json(reports.seasonalityIndex(data, type));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Mevsimsellik analizi oluşturulamadı' });
+  }
+});
+
+// Önümüzdeki N ay için "gerçekten harcanabilir" serbest nakit tahmini
+app.get('/api/reports/free-cash', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const monthsAhead = Math.min(12, Math.max(1, Number(req.query.months) || 3));
+    const historyMonths = Math.min(24, Math.max(2, Number(req.query.historyMonths) || 6));
+    res.json(reports.freeCashForecast(data, monthsAhead, historyMonths));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Serbest nakit tahmini oluşturulamadı' });
+  }
+});
+
+// Birikim hedefi Monte Carlo simülasyonu: ?target=50000&months=24
+app.get('/api/reports/savings-goal', async (req, res) => {
+  try {
+    if (!req.query.target) return res.status(400).json({ error: 'target parametresi zorunlu' });
+    const data = await db.getData();
+    const targetAmount = Number(req.query.target);
+    const monthsHorizon = Math.min(120, Math.max(1, Number(req.query.months) || 24));
+    const startingBalance = Number(req.query.startingBalance) || 0;
+    res.json(reports.savingsGoalSimulation(data, targetAmount, { monthsHorizon, startingBalance }));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Birikim simülasyonu oluşturulamadı' });
+  }
+});
+
+// En çok harcanan kategoriler arasında Pearson korelasyonu
+app.get('/api/reports/category-correlation', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const type = req.query.type === 'gelir' ? 'gelir' : 'gider';
+    const months = Math.min(36, Math.max(3, Number(req.query.months) || 12));
+    const topN = Math.min(20, Math.max(2, Number(req.query.topN) || 8));
+    res.json(reports.categoryCorrelation(data, { months, type, topN }));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Kategori korelasyonu oluşturulamadı' });
+  }
+});
+
+// "Tekrarlayanlar"a henüz eklenmemiş, geçmişte tekrar eden kalıpları tespit eder (abonelik vb.)
+app.get('/api/reports/recurring-candidates', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const months = Math.min(24, Math.max(2, Number(req.query.months) || 6));
+    const minOccurrences = Math.max(2, Number(req.query.minOccurrences) || 3);
+    res.json(reports.detectRecurringCandidates(data, { months, minOccurrences }));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Tekrarlayan işlem taraması oluşturulamadı' });
+  }
+});
+
+// Geçmiş medyana dayalı otomatik bütçe limiti önerisi
+app.get('/api/reports/suggested-budgets', async (req, res) => {
+  try {
+    const data = await db.getData();
+    const months = Math.min(24, Math.max(2, Number(req.query.months) || 6));
+    const marginPct = Math.max(0, Number(req.query.marginPct) || 10);
+    res.json(reports.suggestedBudgets(data, { months, marginPct }));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Bütçe önerisi oluşturulamadı' });
+  }
+});
+
+// Harcama yoğunluğu / eşitsizlik endeksi (Gini katsayısı)
+app.get('/api/reports/spending-concentration', async (req, res) => {
+  try {
+    const data = await db.getData();
+    res.json(reports.spendingConcentration(data, req.query.month || todayISO().slice(0, 7)));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Harcama yoğunluğu analizi oluşturulamadı' });
+  }
+});
+
 // İşlemleri CSV olarak dışa aktar (Excel uyumlu, ; ayraçlı). from/to opsiyonel (YYYY-MM-DD).
 app.get('/api/reports/export.csv', async (req, res) => {
   try {
